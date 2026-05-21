@@ -33,8 +33,12 @@ const PROTOCOL_OPTIONS = [
 const DEFAULT_NOVNC_PORT = 8000;
 
 function createEmptyMapping(): PortMappingFormValue {
+  const id = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
   return {
-    id: crypto.randomUUID(),
+    id,
     container_port: 8080,
     host_port: 8080,
     protocol: "tcp",
@@ -75,9 +79,12 @@ export function SandboxContainerFormModal({
     setPortMappings([]);
     try {
       const response = await generateDefaultSandboxContainerPortMappings({ image_id: nextImageId });
+      const id = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
       if (portMappingRequestId.current !== requestId) return;
       setPortMappings((response.data?.port_mappings ?? []).map((mapping) => ({
-        id: crypto.randomUUID(),
+        id,
         ...mapping,
       })));
     } catch (error) {
