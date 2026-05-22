@@ -18,3 +18,7 @@ web/node_modules
 web/dist
 web/dist-app
 web/dist-landing
+
+.postgres-data/
+.pgadmin-data/
+.z3r0/app.log.*

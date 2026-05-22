@@ -2,6 +2,7 @@ ARG AGENT_BROWSER_VERSION=0.3.4
 ARG GHIDRA_VERSION=12.1
 ARG GHIDRA_BUILD=20260513
 ARG JADX_VERSION=1.5.5
+ARG PDTM_VERSION=latest
 
 # Build the small HTTP/WebSocket proxy used by the sandbox runtime.
 FROM golang:1.26-trixie AS proxy-builder
@@ -102,6 +103,24 @@ RUN set -eux; \
     chmod 755 /opt/jadx/bin/jadx; \
     rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/* /var/cache/apt/*
 
+# Install all ProjectDiscovery tools using PDTM.
+FROM golang:1.26-trixie AS pdtm-builder
+
+ARG PDTM_VERSION
+ENV CGO_ENABLED=0 \
+    PDTM_BIN_DIR=/opt/projectdiscovery/bin \
+    PATH=/opt/projectdiscovery/bin:/go/bin:$PATH
+
+RUN set -eux; \
+    mkdir -p "$PDTM_BIN_DIR"; \
+    go install -v "github.com/projectdiscovery/pdtm/cmd/pdtm@${PDTM_VERSION}"; \
+    cp /go/bin/pdtm /usr/local/bin/pdtm; \
+    pdtm -bp "$PDTM_BIN_DIR" -ia -duc -nc; \
+    cp /usr/local/bin/pdtm "$PDTM_BIN_DIR/pdtm"; \
+    chmod -R 755 "$PDTM_BIN_DIR"; \
+    find "$PDTM_BIN_DIR" -maxdepth 1 -type f -exec strip --strip-unneeded '{}' + 2>/dev/null || true; \
+    rm -rf /go/pkg /root/.cache /tmp/* /var/tmp/*
+
 # Final sandbox runtime image.
 FROM debian:trixie-slim
 
@@ -112,9 +131,10 @@ ENV HOME=/root \
     JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
     GHIDRA_HOME=/opt/ghidra \
     JADX_HOME=/opt/jadx \
+    PROJECTDISCOVERY_HOME=/opt/projectdiscovery \
     UV_TOOL_DIR=/opt/uv/tools \
     UV_TOOL_BIN_DIR=/usr/local/bin \
-    PATH=/opt/jadx/bin:/opt/ghidra:/opt/ghidra/support:/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH
+    PATH=/opt/projectdiscovery/bin:/opt/jadx/bin:/opt/ghidra:/opt/ghidra/support:/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -164,12 +184,14 @@ COPY --from=uv-bin /uvx /usr/local/bin/uvx
 COPY --from=agent-browser-builder /opt/agent-browser /opt/agent-browser
 COPY --from=ghidra-builder /opt/ghidra /opt/ghidra
 COPY --from=jadx-builder /opt/jadx /opt/jadx
+COPY --from=pdtm-builder /opt/projectdiscovery /opt/projectdiscovery
 
 RUN set -eux; \
     ln -sf /opt/ghidra/ghidraRun /usr/local/bin/ghidra; \
     ln -sf /opt/ghidra/support/analyzeHeadless /usr/local/bin/analyzeHeadless; \
     ln -sf /opt/jadx/bin/jadx /usr/local/bin/jadx; \
     ln -sf /opt/agent-browser/bin/agent-browser-cli /usr/local/bin/agent-browser-cli; \
+    find /opt/projectdiscovery/bin -maxdepth 1 -type f -executable -exec ln -sf '{}' /usr/local/bin/ \; ; \
     uv tool install --python /usr/bin/python3 sqlmap; \
     uv cache clean; \
     find /opt/uv/tools -type d -name __pycache__ -prune -exec rm -rf '{}' +; \
@@ -193,12 +215,14 @@ RUN set -eux; \
     x11vnc -version; \
     chromium --version; \
     agent-browser-cli --help >/dev/null; \
+    pdtm -version; \
     command -v websockify; \
     test -f /opt/agent-browser/chrome-extension/manifest.json; \
     test -x /opt/agent-browser/bin/agent-browser-cli; \
     test -x /opt/ghidra/ghidraRun; \
     test -x /opt/ghidra/support/analyzeHeadless; \
-    test -x /opt/jadx/bin/jadx
+    test -x /opt/jadx/bin/jadx; \
+    test -x /opt/projectdiscovery/bin/pdtm
 
 COPY --from=proxy-builder --chmod=755 /sandbox-proxy /usr/local/bin/sandbox-proxy
 COPY --chmod=755 entrypoint.sh /entrypoint.sh
