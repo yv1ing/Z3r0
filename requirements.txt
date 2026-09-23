@@ -34,7 +34,7 @@ jiter==0.16.0
 json_repair==0.61.4
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
-lightrag-hku==1.5.4
+lightrag-hku==1.5.7
 mcp==1.28.1
 multidict==6.7.1
 nano-vectordb==0.0.4.3
